@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+#-*- coding=utf-8
+
+"""Todo List Cli.
+
+Usage:
+  todo task
+  todo book
+  todo task add <name>
+  todo book add <name>
+  todo task rm [<name> | (-n | --no) <number>]
+  todo book rm [<name> | (-n | --no) <number>]
+  todo task find <number>
+  todo book find <number>
+  todo task WIP <number>
+  todo task DONE <number>
+  todo book PENDING <number>
+  todo book WIP <number>
+  todo book DONE <number>
+  todo book PENDING <number>  
+  todo task update <number> <content>
+  todo book update <number> <content>
+  todo (-h | --help)
+  todo --version
+
+Options:
+  -h --help     Show this screen.
+  --version     Show version.
+  -n --no       Remove by number.
+
+"""
+import better_exceptions
+from docopt import docopt
+from datetime import datetime
+from decimal import Decimal
+
+# https://docs.ponyorm.com/api_reference.html
+from pony.orm import *
+from pony.converting import str2datetime
+
+# Database setting
+db = Database("sqlite", "todo.sqlite", create_db=True)
+class Task(db.Entity):
+  content = Required(str)
+  created = Required(datetime, default=datetime.now())
+  updated = Required(str)
+  status  = Required(str, default='TODO')
+
+class Book(db.Entity):
+  content = Required(str)
+  created = Required(datetime, default=datetime.now())
+  updated = Required(datetime, default=datetime.now())
+  status  = Required(str, default='TODO')
+
+# sql_debug(True)
+db.generate_mapping(create_tables=True)
+
+
+# Common functions
+def list_task():
+  tasks = select(t for t in Task)[:]
+  list(tasks)
+
+def list_book():
+  books = select(b for b in Book)[:]
+  list(books)
+
+
+def list(items):
+  if len(items) is not 0:
+    print('編號\t進度\t更新時間\t項目')
+    for i in items:
+      print(str(i.id) + '\t' + i.status + '\t' + str(i.updated).split(' ')[0] + '\t' + i.content)
+  else:
+    print('目前沒有項目')  
+
+@db_session
+def update(model, number, field, value):
+  update_time = str(datetime.now()).split(' ')[0]
+  if model is 'task':
+    t = Task.get(id=number)
+    if t:
+      if field is 'status':
+        t.status = value
+        t.updated = update_time
+        commit()
+      elif field is 'content':
+        t.content = value
+        t.updated = update_time
+        commit()        
+    else:
+      print('查無項目')
+
+  elif model is 'book':
+    b = Book.get(id=number)
+    if b:
+      if field is 'status':
+        b.status = value
+        b.updated = update_time
+        commit()
+      elif field is 'content':
+        b.content = value
+        b.updated = update_time
+        commit()        
+    else:
+      print('查無項目')    
+
+
+# Entry point
+if __name__ == '__main__':
+    args = docopt(__doc__, version='1.0')
+    # print(args)
+    with db_session:
+      if args['task']:
+        if args['add']:
+          if args['<name>']:
+            t = Task(content=args['<name>'])
+            if t:
+              list_task()
+          else:
+            print('請輸入任務內容')
+        elif args['rm']:
+          if args['--no']:
+            t = delete(t for t in Task if t.id == args['<number>'])
+            list_task()
+          elif args['<name>']:
+            t = delete(t for t in Task if t.content == args['<name>'])
+            list_task()
+        elif args['find']:
+          if args['<number>']:
+            t = select(t for t in Task if t.id == args['<number>'])[:]
+            list(t)
+
+            '''            
+            t = Task.get(id=args['<number>'])   # single result
+            show(t) 
+
+            這個做法出來是這樣：
+              instance of Task
+              id|content|created                   |status
+              --+-------+--------------------------+------
+              3 |寫程式    |2017-05-16 15:57:00.263376|TODO            
+            '''
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')
+        elif args['WIP']:
+          if args['<number>']:
+            update('task', args['<number>'], 'status', 'WIP')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')    
+        elif args['DONE']:
+          if args['<number>']:
+            update('task', args['<number>'], 'status', 'DONE')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')    
+        elif args['PENDING']:          
+          if args['<number>']:
+            update('task', args['<number>'], 'status', 'PENDING')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')              
+        elif args['update']:
+          if args['<number>'] and args['<content>']:
+            update('task', args['<number>'], 'content', args['<content>'])
+            list_task()
+        else:
+          list_task()
+
+      if args['book']:
+        if args['add']:
+          if args['<name>']:
+            b = Book(content=args['<name>'])
+            if b:
+              list_book()
+          else:
+            print('請輸入書籍名稱')
+        elif args['rm']:
+          if args['--no']:
+            b = delete(b for b in Book if b.id == args['<number>'])
+            list_book()
+          elif args['<name>']:
+            b = delete(b for b in Book if b.content == args['<name>'])
+            list_book()
+        elif args['find']:
+          if args['<number>']:
+            b = select(b for b in Book if b.id == args['<number>'])[:]
+            list(b)
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')
+        elif args['WIP']:
+          if args['<number>']:
+            update('book', args['<number>'], 'status', 'WIP')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')    
+        elif args['DONE']:
+          if args['<number>']:
+            update('book', args['<number>'], 'status', 'DONE')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')    
+        elif args['PENDING']:          
+          if args['<number>']:
+            update('book', args['<number>'], 'status', 'PENDING')
+          else:
+            print('請輸入編號(暫不提供模糊比對，因此沒有內容搜尋)')              
+        elif args['update']:
+          if args['<number>'] and args['<content>']:
+            update('book', args['<number>'], 'content', args['<content>'])
+            list_book()            
+        else:
+          list_book()
